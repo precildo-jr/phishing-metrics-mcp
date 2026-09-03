@@ -67,11 +67,10 @@ existentes, sem implementação prévia de um endpoint por pergunta.
 
 | Componente | Arquivo | Estado |
 |---|---|---|
-| Camada de persistência | `database.py` | implementado |
+| Camada de persistência (esquema de funil, idempotência, latência) | `database.py` | implementado |
+| Camada de ingestão (webhook do GoPhish, validação HMAC) | `ingestion.py` | implementado |
 | Camada de orquestração (3 ferramentas MCP) | `server_mcp.py` | implementado |
-| Camada de ingestão (recepção de eventos do GoPhish) | — | em desenvolvimento |
-| Esquema de dados de funil (alvo, mensagem, idempotência) | — | em desenvolvimento |
-| Módulo analítico (taxas de funil, latências) | — | em desenvolvimento |
+| Módulo analítico (taxas de funil, latências) | `database.py` | implementado |
 | Arnês de experimento | `experiments/` | em desenvolvimento |
 | Geração de figuras | — | em desenvolvimento |
 
@@ -107,6 +106,17 @@ python database.py
 Cria o arquivo `events.db` caso não exista, registra um evento de verificação e
 imprime os registros armazenados.
 
+**Iniciar o receptor de webhook do GoPhish (camada de ingestão):**
+
+```bash
+# o segredo deve ser o mesmo configurado no webhook do GoPhish
+GOPHISH_WEBHOOK_SECRET=<segredo> python ingestion.py --host 127.0.0.1 --port 9099
+```
+
+O receptor valida a assinatura HMAC-SHA256 do corpo de cada requisição
+(cabeçalho `X-Gophish-Signature`), normaliza o evento e o persiste de forma
+idempotente. Requisições sem assinatura válida recebem `401`.
+
 **Iniciar o servidor MCP:**
 
 ```bash
@@ -140,21 +150,45 @@ acrescente à configuração de servidores MCP:
 
 ## Modelo de dados
 
-Esquema atual da tabela `events`:
+Duas tabelas. `campaigns` normaliza a campanha, antes tratada como texto livre:
 
 | Campo | Tipo | Descrição |
 |---|---|---|
-| `id` | INTEGER PK AUTOINCREMENT | identificador do registro |
-| `campaign_name` | TEXT NOT NULL | campanha associada |
-| `event_type` | TEXT NOT NULL | tipo do evento |
-| `source` | TEXT NOT NULL | origem do registro |
-| `created_at` | TEXT NOT NULL | instante de gravação (`YYYY-MM-DD HH:MM:SS`) |
+| `id` | INTEGER PK | identificador interno |
+| `external_id` | INTEGER UNIQUE | `campaign_id` do GoPhish, quando houver |
+| `name` | TEXT NOT NULL | nome da campanha |
+| `created_at` | TEXT NOT NULL | instante de criação do registro |
 
-As instruções SQL utilizam parâmetros vinculados. O esquema será estendido para
-suportar a apuração de funil — identificador de alvo pseudonimizado,
-identificador da mensagem, identificador externo do evento (idempotência) e
-separação entre o instante de origem e o instante de ingestão, cuja diferença
-constitui a latência de propagação medida no trabalho.
+`events` guarda os campos necessários à apuração de funil, à idempotência e à
+medição de latência:
+
+| Campo | Tipo | Descrição |
+|---|---|---|
+| `id` | INTEGER PK | identificador do registro |
+| `campaign_id` | INTEGER FK → campaigns | campanha associada |
+| `target_id` | TEXT | identificador do alvo **pseudonimizado** (SHA-256); nenhum e-mail é gravado em claro |
+| `message_id` | TEXT | identificador da mensagem, quando disponível |
+| `external_event_id` | TEXT UNIQUE | chave de **idempotência**: reentrega não duplica |
+| `event_type` | TEXT NOT NULL | tipo normalizado (ver abaixo) |
+| `source` | TEXT NOT NULL | origem do registro (`gophish_webhook`, `mcp_server`) |
+| `origin_ts` | TEXT NOT NULL | instante em que o evento ocorreu |
+| `ingest_ts` | TEXT NOT NULL | instante em que foi persistido |
+| `raw_payload` | TEXT | notificação original, para auditoria |
+
+A latência de propagação de cada evento é `ingest_ts − origin_ts`. As
+instruções SQL utilizam parâmetros vinculados, e há índice em
+`(campaign_id, event_type)`.
+
+**Tipos de evento normalizados** (degraus do funil): `EMAIL_SENT`,
+`EMAIL_OPENED`, `LINK_CLICKED`, `DATA_SUBMITTED`, `EMAIL_REPORTED`. A camada de
+ingestão converte as mensagens do GoPhish (`Email Sent`, `Email Opened`,
+`Clicked Link`, `Submitted Data`, `Email Reported`) para esse vocabulário;
+mensagens fora do funil, como `Campaign Created`, são descartadas.
+
+> **Mudança de esquema:** a versão anterior tinha uma única tabela `events`
+> com `campaign_name`/`created_at`. O `events.db` é recriado por
+> `create_database()` a cada execução e não é versionado, de modo que a
+> migração se resume ao esquema aqui descrito; não há dado de produção a migrar.
 
 ---
 
@@ -171,7 +205,8 @@ constitui a latência de propagação medida no trabalho.
 
 ```
 MCP_TCC/
-├── database.py        camada de persistência
+├── database.py        camada de persistência + módulo analítico
+├── ingestion.py       camada de ingestão (receptor de webhook do GoPhish)
 ├── server_mcp.py      camada de orquestração (servidor MCP)
 ├── experiments/       arnês de experimento e cenários
 ├── data/              conjuntos de dados brutos das execuções (CSV)
