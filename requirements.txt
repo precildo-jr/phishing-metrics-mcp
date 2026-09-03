@@ -1,0 +1,2 @@
+# Dependências verificadas no ambiente de desenvolvimento (Python 3.14.4)
+mcp==1.27.1

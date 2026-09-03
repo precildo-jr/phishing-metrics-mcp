@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Banco de dados gerado em tempo de execução (recriado por create_database)
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Segredos e configuração local
+.env
+*.local.json
+config.json
+
+# Binários e artefatos da ferramenta de simulação (não redistribuir)
+gophish/
+gophish.exe
+gophish_admin.crt
+gophish_admin.key
+
+# Sistema operacional / editores
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Os conjuntos de dados das execuções SÃO versionados: ver data/README.md
+!data/*.csv
