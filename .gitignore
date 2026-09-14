@@ -30,3 +30,6 @@ Thumbs.db
 
 # Os conjuntos de dados das execuções SÃO versionados: ver data/README.md
 !data/*.csv
+
+# Figuras derivadas (regeneradas por experiments/make_figures.py)
+figures/*.png

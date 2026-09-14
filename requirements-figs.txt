@@ -1,0 +1,2 @@
+# Dependencia apenas para gerar as figuras (analise), nao da plataforma.
+matplotlib==3.11.2
