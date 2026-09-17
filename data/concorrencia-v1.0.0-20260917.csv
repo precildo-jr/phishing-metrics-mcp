@@ -1,0 +1,5 @@
+escritores,eventos_por_escritor,emitidos,persistidos,perdidos,loss_rate,desfechos,elapsed_s,vazao_eventos_s
+1,60,60,60,0,0.0,200 stored=60,0.939,63.9
+4,60,240,237,3,0.0125,200 stored=237; 503 error=3,3.639,66.0
+8,60,480,475,5,0.010417,200 stored=475; 503 error=5,5.853,82.0
+16,60,960,951,9,0.009375,200 stored=951; 503 error=9,10.578,90.8

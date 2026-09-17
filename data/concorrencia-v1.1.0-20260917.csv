@@ -1,0 +1,5 @@
+escritores,eventos_por_escritor,emitidos,persistidos,perdidos,loss_rate,desfechos,elapsed_s,vazao_eventos_s
+1,60,60,60,0,0.0,200 stored=60,0.914,65.7
+4,60,240,240,0,0.0,200 stored=240,2.519,95.3
+8,60,480,480,0,0.0,200 stored=480,5.005,95.9
+16,60,960,960,0,0.0,200 stored=960,10.73,89.5

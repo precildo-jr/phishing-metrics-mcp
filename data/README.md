@@ -48,6 +48,24 @@ Uma linha por execução; 270 linhas mais o cabeçalho.
 | `observado` | Comportamento observado, composto a partir dos códigos HTTP e do estado da base. |
 | `veredito` | `Conforme` ou `Não conforme`, derivado da comparação — não declarado de antemão. |
 
+### `concorrencia-*.csv` — varredura de concorrência
+
+| Campo | Significado |
+|---|---|
+| `escritores` | Número de ingestores submetendo eventos simultaneamente. |
+| `eventos_por_escritor` | Eventos submetidos por cada escritor. |
+| `emitidos` | Total de requisições enviadas (`escritores` × `eventos_por_escritor`). |
+| `persistidos` | Registros apurados na base ao final. |
+| `perdidos` | `emitidos − persistidos`. |
+| `loss_rate` | Taxa de perda sob aquele grau de concorrência. |
+| `desfechos` | Contagem por código HTTP e desfecho, como devolvidos pelo receptor. |
+| `elapsed_s` | Duração da rodada, em segundos. |
+| `vazao_eventos_s` | `emitidos / elapsed_s`. |
+
+Os arquivos trazem o sufixo da versão da plataforma: `concorrencia-v1.0.0-*.csv`
+documenta a perda observada antes da correção e `concorrencia-v1.1.0-*.csv`, o
+resultado depois dela. Ambos foram produzidos pelo mesmo arnês.
+
 ### `perguntas-analiticas-*.csv` — composição sobre a camada de orquestração
 
 | Campo | Significado |

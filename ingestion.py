@@ -27,6 +27,10 @@ import database
 SIGNATURE_HEADER = "X-Gophish-Signature"
 MAX_BODY_BYTES = 1_048_576  # 1 MiB; um evento de campanha é muito menor
 
+# Substitui o endereço do destinatário no corpo bruto preservado para auditoria.
+# O pseudônimo correspondente permanece disponível no campo `target_id`.
+REDACTED = "[endereco-suprimido]"
+
 
 def valid_signature(secret: str, body: bytes, header_value: str | None) -> bool:
     """Confere a assinatura HMAC-SHA256 do corpo bruto, em tempo constante.
@@ -51,6 +55,10 @@ def normalize(payload: dict) -> dict | None:
     campos que identificam univocamente a ocorrência — campanha, alvo, tipo e
     instante — de modo que a reentrega da mesma notificação produza a mesma
     chave.
+
+    O corpo bruto é preservado para auditoria, mas com o endereço do
+    destinatário suprimido: retê-lo em texto claro anularia a pseudonimização
+    aplicada ao campo de alvo, já que bastaria ler o corpo para recuperá-lo.
     """
     message = payload.get("message")
     event_type = database.GOPHISH_MESSAGE_MAP.get(message)
@@ -65,6 +73,10 @@ def normalize(payload: dict) -> dict | None:
     external_event_id = "gp-" + hashlib.sha256(
         fingerprint.encode("utf-8")).hexdigest()[:24]
 
+    auditavel = dict(payload)
+    if auditavel.get("email"):
+        auditavel["email"] = REDACTED
+
     return {
         "campaign_name": f"gophish-campaign-{campaign_external_id}",
         "campaign_external_id": campaign_external_id,
@@ -73,7 +85,7 @@ def normalize(payload: dict) -> dict | None:
         "external_event_id": external_event_id,
         "target": email or None,
         "origin_ts": origin_ts or None,
-        "raw_payload": json.dumps(payload, ensure_ascii=False),
+        "raw_payload": json.dumps(auditavel, ensure_ascii=False),
     }
 
 

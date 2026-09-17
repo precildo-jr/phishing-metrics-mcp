@@ -10,11 +10,26 @@ Sem dependências externas: apenas a biblioteca padrão do Python.
 from __future__ import annotations
 
 import hashlib
+import hmac
+import os
+import secrets
 import sqlite3
+import threading
 import uuid
 from datetime import datetime, timezone
 
 DB_PATH = "events.db"
+
+# Espera máxima por um bloqueio de escrita. O SQLite serializa escritores; sem
+# esta espera, um segundo escritor recebe "database is locked" de imediato e o
+# evento se perde. Não afeta a escrita sequencial, apenas a concorrente.
+BUSY_TIMEOUT_S = 30.0
+
+# Variável de ambiente que guarda a chave de derivação dos pseudônimos.
+PSEUDONYM_KEY_ENV = "MCP_TCC_PSEUDONYM_KEY"
+
+_key_cache: dict[str, bytes] = {}
+_key_lock = threading.Lock()
 
 # Tipos de evento normalizados (degraus do funil, na ordem canônica).
 EMAIL_SENT = "EMAIL_SENT"
@@ -41,30 +56,77 @@ def _now() -> str:
 
 
 def _connect(db_path: str = DB_PATH) -> sqlite3.Connection:
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(db_path, timeout=BUSY_TIMEOUT_S)
+    conn.execute(f"PRAGMA busy_timeout = {int(BUSY_TIMEOUT_S * 1000)}")
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
 
 
-def pseudonymize(target: str) -> str:
+def _pseudonym_key(db_path: str = DB_PATH) -> bytes:
+    """Chave de derivação dos pseudônimos, com a chave fora da base de preferência.
+
+    A variável de ambiente é a via preferencial: mantida fora do arquivo, o
+    vazamento da base não basta para reverter os pseudônimos. Na falta dela,
+    gera-se uma chave aleatória por base, registrada em `meta`, o que preserva a
+    estabilidade dos identificadores mas oferece proteção menor, uma vez que
+    chave e dados passam a coabitar no mesmo arquivo.
+    """
+    do_ambiente = os.environ.get(PSEUDONYM_KEY_ENV)
+    if do_ambiente:
+        return do_ambiente.encode("utf-8")
+
+    with _key_lock:
+        if db_path in _key_cache:
+            return _key_cache[db_path]
+        conn = _connect(db_path)
+        try:
+            row = conn.execute(
+                "SELECT value FROM meta WHERE key = 'pseudonym_key'").fetchone()
+            if row is None:
+                gerada = secrets.token_hex(32)
+                conn.execute(
+                    "INSERT OR IGNORE INTO meta (key, value) VALUES (?, ?)",
+                    ("pseudonym_key", gerada))
+                conn.commit()
+                row = conn.execute(
+                    "SELECT value FROM meta WHERE key = 'pseudonym_key'").fetchone()
+        finally:
+            conn.close()
+        chave = row[0].encode("utf-8")
+        _key_cache[db_path] = chave
+        return chave
+
+
+def pseudonymize(target: str, db_path: str = DB_PATH) -> str:
     """Deriva um identificador pseudonimizado e estável a partir do alvo.
 
-    Aplica SHA-256 e retorna os 16 primeiros dígitos hexadecimais. É
-    determinístico (o mesmo alvo produz o mesmo identificador) e não reversível,
-    de modo que nenhum endereço real é persistido.
+    Usa HMAC-SHA256 com chave, e não um resumo simples: endereços de correio
+    formam um domínio de baixa entropia, sobre o qual um resumo sem segredo
+    cederia à enumeração de candidatos. Sem a chave, o pseudônimo não pode ser
+    associado de volta ao endereço. É determinístico dentro de uma mesma base,
+    de modo que a apuração por alvo distinto continua possível.
     """
-    return hashlib.sha256(target.encode("utf-8")).hexdigest()[:16]
+    return hmac.new(_pseudonym_key(db_path), target.encode("utf-8"),
+                    hashlib.sha256).hexdigest()[:16]
 
 
 def create_database(db_path: str = DB_PATH) -> None:
     """Cria o esquema, caso ainda não exista.
 
-    Duas tabelas: `campaigns`, que normaliza a campanha, antes tratada como
-    texto livre; e `events`, com os campos necessários à apuração de funil,
-    à idempotência e à medição de latência.
+    Três tabelas: `campaigns`, que normaliza a campanha, antes tratada como
+    texto livre; `events`, com os campos necessários à apuração de funil, à
+    idempotência e à medição de latência; e `meta`, que guarda a chave de
+    derivação dos pseudônimos quando ela não vem do ambiente.
     """
     conn = _connect(db_path)
     cur = conn.cursor()
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS meta (
+            key    TEXT PRIMARY KEY,
+            value  TEXT NOT NULL
+        )
+    """)
 
     cur.execute("""
         CREATE TABLE IF NOT EXISTS campaigns (
@@ -93,26 +155,48 @@ def create_database(db_path: str = DB_PATH) -> None:
     cur.execute("CREATE INDEX IF NOT EXISTS idx_events_campaign_type "
                 "ON events (campaign_id, event_type)")
 
+    # Semeia a chave de pseudonimização já na criação, quando ela não vem do
+    # ambiente, para que a derivação em tempo de ingestão seja apenas leitura.
+    if not os.environ.get(PSEUDONYM_KEY_ENV):
+        cur.execute("INSERT OR IGNORE INTO meta (key, value) VALUES (?, ?)",
+                    ("pseudonym_key", secrets.token_hex(32)))
+
     conn.commit()
     conn.close()
 
 
 def _get_or_create_campaign(conn: sqlite3.Connection, name: str,
                             external_id: int | None = None) -> int:
+    """Resolve a campanha, criando-a se necessário, sem condição de corrida.
+
+    Consultar e depois inserir não basta sob concorrência: dois ingestores
+    podem não encontrar a campanha e tentar criá-la, e o segundo viola a
+    restrição de unicidade. Quando isso ocorre, a inserção alheia é acolhida e
+    o registro relido, em lugar de propagar o erro e perder o evento.
+    """
     cur = conn.cursor()
-    if external_id is not None:
-        row = cur.execute("SELECT id FROM campaigns WHERE external_id = ?",
-                           (external_id,)).fetchone()
+
+    def buscar():
+        if external_id is not None:
+            return cur.execute("SELECT id FROM campaigns WHERE external_id = ?",
+                               (external_id,)).fetchone()
+        return cur.execute("SELECT id FROM campaigns WHERE name = ? "
+                           "AND external_id IS NULL", (name,)).fetchone()
+
+    row = buscar()
+    if row:
+        return row[0]
+
+    try:
+        cur.execute("INSERT INTO campaigns (external_id, name, created_at) "
+                    "VALUES (?, ?, ?)", (external_id, name, _now()))
+        return cur.lastrowid
+    except sqlite3.IntegrityError:
+        conn.rollback()
+        row = buscar()
         if row:
             return row[0]
-    else:
-        row = cur.execute("SELECT id FROM campaigns WHERE name = ? "
-                          "AND external_id IS NULL", (name,)).fetchone()
-        if row:
-            return row[0]
-    cur.execute("INSERT INTO campaigns (external_id, name, created_at) "
-                "VALUES (?, ?, ?)", (external_id, name, _now()))
-    return cur.lastrowid
+        raise
 
 
 def register_event(campaign_name: str, event_type: str, source: str = "mcp_server",
@@ -146,14 +230,26 @@ def register_event(campaign_name: str, event_type: str, source: str = "mcp_serve
             return existing[0], False
 
         ingest_ts = _now()
-        target_id = pseudonymize(target) if target else None
-        cur.execute("""
-            INSERT INTO events (campaign_id, target_id, message_id,
-                                external_event_id, event_type, source,
-                                origin_ts, ingest_ts, raw_payload)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (campaign_id, target_id, message_id, external_event_id, event_type,
-              source, origin_ts or ingest_ts, ingest_ts, raw_payload))
+        target_id = pseudonymize(target, db_path) if target else None
+        try:
+            cur.execute("""
+                INSERT INTO events (campaign_id, target_id, message_id,
+                                    external_event_id, event_type, source,
+                                    origin_ts, ingest_ts, raw_payload)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (campaign_id, target_id, message_id, external_event_id, event_type,
+                  source, origin_ts or ingest_ts, ingest_ts, raw_payload))
+        except sqlite3.IntegrityError:
+            # Reentrega simultânea do mesmo evento: outro ingestor inseriu entre
+            # a consulta acima e esta gravação. O desfecho é o mesmo de uma
+            # duplicata detectada pela consulta — devolve-se o registro original.
+            conn.rollback()
+            existing = cur.execute(
+                "SELECT id FROM events WHERE external_event_id = ?",
+                (external_event_id,)).fetchone()
+            if existing:
+                return existing[0], False
+            raise
         conn.commit()
         return cur.lastrowid, True
     finally:

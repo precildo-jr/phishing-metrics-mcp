@@ -16,6 +16,7 @@ Métodos do TCC.
 | `generator.py` | Gerador probabilístico de eventos de campanha. Cadeia de ensaios de Bernoulli condicionais sobre uma linha do tempo de Poisson. Define os perfis `baixo`, `base` e `alto`. |
 | `run_experiment.py` | Varredura de carga × funil × repetições. Produz `data/experimento-*.csv`. |
 | `robustness.py` | Bateria de verificação de robustez: sete casos adversos contra o receptor de webhook em operação real, sobre HTTP. Produz `data/robustez-*.csv`. |
+| `concurrency.py` | Varredura de concorrência: N escritores simultâneos contra o receptor real, comparando requisições aceitas com registros persistidos. Produz `data/concorrencia-*.csv`. |
 | `analytical_questions.py` | Verificação da decisão arquitetural: dez perguntas analíticas submetidas ao servidor MCP por conexão real de protocolo. Produz `data/perguntas-analiticas-*.csv`. |
 | `make_figures.py` | Figuras do TCC em escala de cinza, a partir de um CSV de varredura. Requer matplotlib (`requirements-figs.txt`). |
 
