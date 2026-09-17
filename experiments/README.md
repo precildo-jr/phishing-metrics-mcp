@@ -14,9 +14,11 @@ Métodos do TCC.
 | Arquivo | Papel |
 |---|---|
 | `generator.py` | Gerador probabilístico de eventos de campanha. Cadeia de ensaios de Bernoulli condicionais sobre uma linha do tempo de Poisson. Define os perfis `baixo`, `base` e `alto`. |
-| `run_experiment.py` | Varredura de carga × funil × repetições. Produz `data/experimento-*.csv`. |
+| `run_experiment.py` | Varredura de carga × funil × repetições, submetendo os eventos pelo receptor de webhook por HTTP. Produz `data/experimento-*.csv`. |
 | `robustness.py` | Bateria de verificação de robustez: sete casos adversos contra o receptor de webhook em operação real, sobre HTTP. Produz `data/robustez-*.csv`. |
 | `concurrency.py` | Varredura de concorrência: N escritores simultâneos contra o receptor real, comparando requisições aceitas com registros persistidos. Produz `data/concorrencia-*.csv`. |
+| `llm_agent_questions.py` | As mesmas dez perguntas, agora entregues em linguagem natural a um modelo, que descobre as ferramentas e decide sozinho quais invocar. Produz `data/agente-llm-*.csv`. Requer `DEEPSEEK_API`. |
+| `webhook.py` | Utilitários comuns aos arneses que falam com o receptor: segredo, assinatura HMAC e subida do servidor em porta efêmera. |
 | `analytical_questions.py` | Verificação da decisão arquitetural: dez perguntas analíticas submetidas ao servidor MCP por conexão real de protocolo. Produz `data/perguntas-analiticas-*.csv`. |
 | `make_figures.py` | Figuras do TCC em escala de cinza, a partir de um CSV de varredura. Requer matplotlib (`requirements-figs.txt`). |
 

@@ -20,6 +20,7 @@ import hashlib
 import hmac
 import json
 import os
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import database
@@ -43,6 +44,31 @@ def valid_signature(secret: str, body: bytes, header_value: str | None) -> bool:
         else header_value
     expected = hmac.new(secret.encode("utf-8"), body, hashlib.sha256).hexdigest()
     return hmac.compare_digest(received, expected)
+
+
+def instante_interno(valor: str) -> str | None:
+    """Converte o carimbo da notificação para o formato interno de tempo.
+
+    O Gophish emite ISO 8601 (`2026-09-17T10:00:00Z`, por vezes com frações de
+    segundo), ao passo que a apuração de latência interpreta
+    `%Y-%m-%d %H:%M:%S.%f`. Sem esta conversão os eventos recebidos por webhook
+    são gravados num formato que a apuração não lê, e ficam silenciosamente
+    fora do cálculo de latência — a contagem de eventos medidos passa a ser
+    menor que a de eventos persistidos, sem que nada sinalize o descarte.
+
+    Devolve None quando o valor não é um instante reconhecível, caso em que a
+    camada de persistência assume o instante de ingestão.
+    """
+    if not valor:
+        return None
+    texto = valor.strip()
+    try:
+        momento = datetime.fromisoformat(texto.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if momento.tzinfo is not None:
+        momento = momento.astimezone(timezone.utc).replace(tzinfo=None)
+    return momento.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
 
 
 def normalize(payload: dict) -> dict | None:
@@ -84,7 +110,7 @@ def normalize(payload: dict) -> dict | None:
         "source": "gophish_webhook",
         "external_event_id": external_event_id,
         "target": email or None,
-        "origin_ts": origin_ts or None,
+        "origin_ts": instante_interno(origin_ts),
         "raw_payload": json.dumps(auditavel, ensure_ascii=False),
     }
 

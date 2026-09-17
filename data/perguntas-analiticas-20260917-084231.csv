@@ -1,0 +1,11 @@
+id,pergunta,ferramentas_compostas,desfecho,resposta
+Q01,Quantos eventos foram registrados ao todo?,generate_basic_metrics,Resolvida por composição,5000 eventos registrados
+Q02,Qual a taxa de clique sobre os e-mails enviados?,generate_basic_metrics,Resolvida por composição,536 cliques sobre 2813 enviados (19.05%)
+Q03,Qual a latência de propagação dos eventos até a base?,generate_basic_metrics,Resolvida por composição,"p50 = 1.0 ms, p95 = 3.0 ms, máximo = 46.0 ms"
+Q04,Quantos alvos distintos clicaram no link?,get_registered_events,Resolvida por composição,472 alvos distintos clicaram no link
+Q05,Qual foi o primeiro evento da série e quando ocorreu?,get_registered_events,Resolvida por composição,EMAIL_SENT da campanha gophish-campaign-42 em 2026-09-14T13:00:00Z
+Q06,Algum alvo submeteu credenciais sem que houvesse clique registrado?,get_registered_events,Resolvida por composição,0 alvos submeteram credenciais sem clique registrado (de 226 submissões)
+Q07,Qual campanha apresentou a maior taxa de clique?,get_registered_events,Resolvida por composição,campanha-comercial: 16.03%; campanha-financeiro: 29.21%; gophish-campaign-42: 9.05%
+Q08,Quantos eventos vieram de cada origem de coleta?,get_registered_events,Resolvida por composição,generator: 4000; gophish_webhook: 1000
+Q09,Qual o conteúdo bruto da notificação que originou um evento?,get_registered_events + generate_basic_metrics,Exigiria novo ponto de acesso,não obtenível a partir das ferramentas expostas
+Q10,Qual o endereço de e-mail do alvo que submeteu credenciais?,get_registered_events,Exigiria novo ponto de acesso,não obtenível a partir das ferramentas expostas

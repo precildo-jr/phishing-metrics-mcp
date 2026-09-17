@@ -51,7 +51,7 @@ CARGA = 2000
 
 
 # --- preparação da base que o servidor MCP irá expor -------------------------
-def preparar_base(dir_trabalho: str) -> str:
+def preparar_base(dir_trabalho: str, carga: int | None = None) -> str:
     """Popula a base que o servidor MCP lerá, no diretório de trabalho dele.
 
     O servidor resolve `events.db` relativamente ao diretório corrente, de modo
@@ -63,6 +63,7 @@ def preparar_base(dir_trabalho: str) -> str:
     latência de propagação é medida como no experimento principal — o instante
     de origem é capturado imediatamente antes da inserção.
     """
+    carga = CARGA if carga is None else carga
     db_path = os.path.join(dir_trabalho, "events.db")
     database.create_database(db_path)
     fmt = "%Y-%m-%d %H:%M:%S.%f"
@@ -70,7 +71,7 @@ def preparar_base(dir_trabalho: str) -> str:
     for nome_cenario, campanha in (("base", "campanha-comercial"),
                                    ("alto", "campanha-financeiro")):
         eventos = generator.generate_events(
-            CARGA, funnel=generator.scenario(nome_cenario), seed=SEMENTE,
+            carga, funnel=generator.scenario(nome_cenario), seed=SEMENTE,
             campaign_name=campanha)
         for ev in eventos:
             origem = datetime.now(timezone.utc).strftime(fmt)[:-3]
@@ -85,7 +86,7 @@ def preparar_base(dir_trabalho: str) -> str:
     # a campanha é comparável às demais.
     mensagem_de = {v: k for k, v in database.GOPHISH_MESSAGE_MAP.items()}
     eventos = generator.generate_events(
-        CARGA // 2, funnel=generator.scenario("baixo"), seed=SEMENTE + 1,
+        carga // 2, funnel=generator.scenario("baixo"), seed=SEMENTE + 1,
         campaign_name="campanha-operacoes")
     for i, ev in enumerate(eventos):
         mensagem = mensagem_de.get(ev["event_type"])
@@ -175,8 +176,9 @@ def p09(ev, mt):
 
 def p10(ev, mt):
     """Endereço de e-mail do alvo que submeteu credenciais."""
-    # `target_id` é o pseudônimo irreversível gravado pela camada de
-    # persistência; o endereço original não é armazenado em lugar algum.
+    # `target_id` é o pseudônimo derivado por HMAC com chave; sem a chave, ele
+    # não se associa de volta ao endereço, e a camada de ingestão suprime o
+    # endereço do corpo bruto antes de persistir.
     for e in ev:
         if e["event_type"] == "DATA_SUBMITTED":
             alvo = e.get("target_id") or ""

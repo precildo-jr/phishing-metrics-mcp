@@ -44,38 +44,11 @@ sys.path.insert(0, os.path.dirname(_HERE))
 import database    # noqa: E402
 import ingestion   # noqa: E402
 
+from webhook import HOST, Receptor, novo_db, post, sign  # noqa: E402,F401
+
 DATA_DIR = os.path.join(os.path.dirname(_HERE), "data")
-SECRET = "segredo-de-teste-do-experimento"
-HOST = "127.0.0.1"
 
 CSV_FIELDS = ["caso", "descricao", "esperado", "observado", "veredito"]
-
-
-# --- infraestrutura de apoio -------------------------------------------------
-def sign(body: bytes) -> str:
-    """Assina o corpo como o GoPhish o assinaria."""
-    return "sha256=" + hmac.new(SECRET.encode("utf-8"), body,
-                                hashlib.sha256).hexdigest()
-
-
-def post(port: int, payload, *, signature: str | None = None,
-         raw: bytes | None = None) -> tuple[int, dict]:
-    """Envia uma requisição ao receptor. Devolve (código HTTP, corpo)."""
-    body = raw if raw is not None else json.dumps(payload).encode("utf-8")
-    headers = {"Content-Type": "application/json",
-               ingestion.SIGNATURE_HEADER: signature if signature is not None
-               else sign(body)}
-    conn = http.client.HTTPConnection(HOST, port, timeout=10)
-    try:
-        conn.request("POST", "/", body=body, headers=headers)
-        resp = conn.getresponse()
-        data = resp.read()
-        try:
-            return resp.status, json.loads(data)
-        except json.JSONDecodeError:
-            return resp.status, {"raw": data.decode("utf-8", "replace")}
-    finally:
-        conn.close()
 
 
 def count_events(db_path: str) -> int:
@@ -91,33 +64,6 @@ def gophish_payload(message: str, email: str, time: str,
     """Notificação do GoPhish no formato que o receptor espera."""
     return {"campaign_id": campaign_id, "email": email,
             "time": time, "message": message}
-
-
-class Receptor:
-    """Sobe o receptor real em porta efêmera, com base de dados própria."""
-
-    def __init__(self, db_path: str):
-        self.db_path = db_path
-        self.server = ingestion.build_server(HOST, 0, SECRET, db_path)
-        self.port = self.server.server_address[1]
-        self.thread = threading.Thread(target=self.server.serve_forever,
-                                       daemon=True)
-
-    def __enter__(self):
-        self.thread.start()
-        return self
-
-    def __exit__(self, *exc):
-        self.server.shutdown()
-        self.server.server_close()
-        self.thread.join(timeout=5)
-
-
-def novo_db() -> str:
-    fd, path = tempfile.mkstemp(suffix=".db", prefix="robustez_")
-    os.close(fd)
-    os.remove(path)
-    return path
 
 
 def veredito(ok: bool) -> str:
