@@ -27,7 +27,7 @@ produziu os dados e os dados produzidos.
 
 | Campo | Tipo | Significado |
 |---|---|---|
-| `scenario` | texto | Perfil de funil: `baixo`, `base` ou `alto` (ver `experiments/generator.py`). |
+| `scenario` | texto | Perfil de funil: `baixo`, `base` ou `alto` (ver `experimentos/generator.py`). |
 | `transport` | texto | `webhook` quando o evento percorreu a camada de ingestão por HTTP; `direct` quando foi gravado direto na persistência. |
 | `accepted` | inteiro | Requisições que o receptor aceitou (HTTP 200). Difere de `emitted` apenas se alguma for recusada. |
 | `load` | inteiro | Eventos gerados na execução: 100, 1.000 ou 10.000. |
@@ -100,18 +100,18 @@ resultado depois dela. Ambos foram produzidos pelo mesmo arnês.
 ## Reprodução
 
 ```
-python experiments/run_experiment.py --loads 100,1000,10000 --reps 30 --seed 20260910
-python experiments/run_experiment.py --transport direct          # percurso de contraste
-python experiments/concurrency.py
-python experiments/robustness.py
-python experiments/analytical_questions.py
-python experiments/llm_agent_questions.py --load 50              # requer DEEPSEEK_API
-python experiments/llm_agent_questions.py --load 200
-python experiments/make_figures.py                               # usa o CSV mais recente
+python experimentos/run_experiment.py --loads 100,1000,10000 --reps 30 --seed 20260910
+python experimentos/run_experiment.py --transport direct          # percurso de contraste
+python experimentos/concurrency.py
+python experimentos/robustness.py
+python experimentos/analytical_questions.py
+python experimentos/llm_agent_questions.py --load 50              # requer DEEPSEEK_API
+python experimentos/llm_agent_questions.py --load 200
+python analise/make_figures.py                               # usa o CSV mais recente
 ```
 
 A varredura de carga pelo webhook leva cerca de 4,5 h; use `--start-rep` para
 retomá-la se for interrompida.
 
-As figuras derivadas não são versionadas: `experiments/make_figures.py` as
+As figuras derivadas não são versionadas: `analise/make_figures.py` as
 regenera a partir do CSV a qualquer momento.

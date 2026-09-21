@@ -7,7 +7,14 @@ linguagem natural, compostas a partir das ferramentas existentes.
 """
 from mcp.server.fastmcp import FastMCP
 
-import database
+import os
+import sys
+
+_RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _RAIZ not in sys.path:
+    sys.path.insert(0, _RAIZ)
+
+from plataforma import persistencia
 
 mcp = FastMCP("gophish-tcc-server")
 
@@ -19,8 +26,8 @@ def register_simulated_event(
     source: str = "mcp_server",
 ) -> dict:
     """Registra um evento simulado, de forma idempotente."""
-    database.create_database()
-    event_id, inserted = database.register_event(campaign_name, event_type, source)
+    persistencia.create_database()
+    event_id, inserted = persistencia.register_event(campaign_name, event_type, source)
     return {
         "status": "success" if inserted else "duplicate",
         "event_id": event_id,
@@ -33,8 +40,8 @@ def register_simulated_event(
 @mcp.tool()
 def get_registered_events() -> dict:
     """Consulta os eventos persistidos, mais recentes primeiro."""
-    database.create_database()
-    events = database.list_events()
+    persistencia.create_database()
+    events = persistencia.list_events()
     return {
         "total": len(events),
         "events": [
@@ -60,13 +67,13 @@ def generate_basic_metrics() -> dict:
     cada degrau do funil e um resumo da latência de propagação, todos apurados
     em SQL sobre a base persistida.
     """
-    database.create_database()
-    counts = database.count_by_type()
+    persistencia.create_database()
+    counts = persistencia.count_by_type()
     return {
         "total_events": sum(counts.values()),
         "events_by_type": counts,
-        "funnel_rates": database.funnel_rates(),
-        "propagation_latency_ms": database.latency_summary(),
+        "funnel_rates": persistencia.funnel_rates(),
+        "propagation_latency_ms": persistencia.latency_summary(),
     }
 
 

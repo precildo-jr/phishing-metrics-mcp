@@ -11,7 +11,7 @@ webhook e envia o resultado no cabeçalho `X-Gophish-Signature`, no formato
 Sem dependências externas: apenas a biblioteca padrão do Python.
 
 Uso:
-    GOPHISH_WEBHOOK_SECRET=<segredo> python ingestion.py [--host H] [--port P]
+    GOPHISH_WEBHOOK_SECRET=<segredo> python ingestao.py [--host H] [--port P]
 """
 from __future__ import annotations
 
@@ -23,7 +23,14 @@ import os
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-import database
+import os
+import sys
+
+_RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _RAIZ not in sys.path:
+    sys.path.insert(0, _RAIZ)
+
+from plataforma import persistencia
 
 SIGNATURE_HEADER = "X-Gophish-Signature"
 MAX_BODY_BYTES = 1_048_576  # 1 MiB; um evento de campanha é muito menor
@@ -87,7 +94,7 @@ def normalize(payload: dict) -> dict | None:
     aplicada ao campo de alvo, já que bastaria ler o corpo para recuperá-lo.
     """
     message = payload.get("message")
-    event_type = database.GOPHISH_MESSAGE_MAP.get(message)
+    event_type = persistencia.GOPHISH_MESSAGE_MAP.get(message)
     if event_type is None:
         return None
 
@@ -115,13 +122,13 @@ def normalize(payload: dict) -> dict | None:
     }
 
 
-def handle_event(payload: dict, db_path: str = database.DB_PATH) -> dict:
+def handle_event(payload: dict, db_path: str = persistencia.DB_PATH) -> dict:
     """Normaliza e persiste um evento. Retorna o desfecho da operação."""
     record = normalize(payload)
     if record is None:
         return {"status": "ignored", "reason": "tipo fora do funil"}
 
-    event_id, inserted = database.register_event(
+    event_id, inserted = persistencia.register_event(
         record["campaign_name"], record["event_type"], record["source"],
         external_event_id=record["external_event_id"], target=record["target"],
         origin_ts=record["origin_ts"], raw_payload=record["raw_payload"],
@@ -136,7 +143,7 @@ def handle_event(payload: dict, db_path: str = database.DB_PATH) -> dict:
 
 class WebhookHandler(BaseHTTPRequestHandler):
     secret = ""
-    db_path = database.DB_PATH
+    db_path = persistencia.DB_PATH
 
     def _reply(self, code: int, obj: dict) -> None:
         body = json.dumps(obj).encode("utf-8")
@@ -173,8 +180,8 @@ class WebhookHandler(BaseHTTPRequestHandler):
 
 
 def build_server(host: str, port: int, secret: str,
-                 db_path: str = database.DB_PATH) -> ThreadingHTTPServer:
-    database.create_database(db_path)
+                 db_path: str = persistencia.DB_PATH) -> ThreadingHTTPServer:
+    persistencia.create_database(db_path)
     WebhookHandler.secret = secret
     WebhookHandler.db_path = db_path
     return ThreadingHTTPServer((host, port), WebhookHandler)

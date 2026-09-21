@@ -1,7 +1,7 @@
 """Captura ponta a ponta do webhook real do Gophish.
 
 Sobe o receptor de eventos da plataforma — a mesma validação de assinatura, a
-mesma normalização e a mesma persistência de `ingestion.py` — e, além de
+mesma normalização e a mesma persistência de `ingestao.py` — e, além de
 processar cada requisição, registra em um arquivo de evidência tudo o que
 efetivamente chegou: cabeçalhos, corpo bruto, veredito da assinatura e desfecho
 da ingestão. Serve para confirmar que a plataforma recebe o Gophish real, e não
@@ -23,12 +23,12 @@ import sys
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-_HERE = os.path.dirname(os.path.abspath(__file__))
-_RAIZ = os.path.dirname(_HERE)
-sys.path.insert(0, _RAIZ)
+_RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _RAIZ not in sys.path:
+    sys.path.insert(0, _RAIZ)
 
-import database    # noqa: E402
-import ingestion   # noqa: E402
+from plataforma import persistencia  # noqa: E402
+from plataforma import ingestao      # noqa: E402
 
 DATA_DIR = os.path.join(_RAIZ, "data")
 CAPTURE_DB = os.path.join(_RAIZ, "captura-webhook.db")
@@ -37,7 +37,7 @@ CAPTURE_DB = os.path.join(_RAIZ, "captura-webhook.db")
 class CaptureHandler(BaseHTTPRequestHandler):
     """Receptor real, acrescido de um registro de evidência por requisição.
 
-    Reaproveita `valid_signature` e `handle_event` de `ingestion.py`: a lógica
+    Reaproveita `valid_signature` e `handle_event` de `ingestao.py`: a lógica
     exercitada é exatamente a da plataforma, sem simulacro. O único acréscimo é
     a gravação do que chegou, para inspeção posterior.
     """
@@ -68,8 +68,8 @@ class CaptureHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         tamanho = int(self.headers.get("Content-Length") or 0)
         corpo = self.rfile.read(tamanho) if tamanho > 0 else b""
-        assinatura = self.headers.get(ingestion.SIGNATURE_HEADER)
-        valida = ingestion.valid_signature(self.secret, corpo, assinatura)
+        assinatura = self.headers.get(ingestao.SIGNATURE_HEADER)
+        valida = ingestao.valid_signature(self.secret, corpo, assinatura)
 
         registro = {
             "corpo_bruto": corpo.decode("utf-8", "replace"),
@@ -91,7 +91,7 @@ class CaptureHandler(BaseHTTPRequestHandler):
             return self._responder(400, {"status": "error", "reason": "JSON malformado"})
 
         try:
-            resultado = ingestion.handle_event(payload, self.db_path)
+            resultado = ingestao.handle_event(payload, self.db_path)
         except Exception as exc:                                    # noqa: BLE001
             registro["desfecho"] = f"erro: {type(exc).__name__}"
             self._registrar(registro)
@@ -118,7 +118,7 @@ def main() -> None:
     os.makedirs(DATA_DIR, exist_ok=True)
     if os.path.exists(CAPTURE_DB):
         os.remove(CAPTURE_DB)
-    database.create_database(CAPTURE_DB)
+    persistencia.create_database(CAPTURE_DB)
 
     CaptureHandler.secret = args.secret
     CaptureHandler.db_path = CAPTURE_DB

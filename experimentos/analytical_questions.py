@@ -6,7 +6,7 @@ por composição das ferramentas já expostas ou se demandaria a implementação
 um novo ponto de acesso — procedimento que permite contrastar a abordagem
 adotada com uma interface de consultas predefinidas.
 
-A conexão é real: o servidor de `server_mcp.py` é iniciado como subprocesso e
+A conexão é real: o servidor de `plataforma/orquestracao.py` é iniciado como subprocesso e
 interrogado pelo protocolo MCP sobre transporte padrão de entrada e saída. As
 ferramentas são descobertas por `list_tools` e invocadas por `call_tool`, sem
 que este arnês acesse a base de dados diretamente. O veredito de cada pergunta
@@ -31,14 +31,14 @@ import tempfile
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 
+_RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _RAIZ not in sys.path:
+    sys.path.insert(0, _RAIZ)
 _HERE = os.path.dirname(os.path.abspath(__file__))
-_RAIZ = os.path.dirname(_HERE)
-sys.path.insert(0, _HERE)
-sys.path.insert(0, _RAIZ)
 
-import database   # noqa: E402
-import generator  # noqa: E402
-import ingestion  # noqa: E402
+from plataforma import persistencia  # noqa: E402
+from plataforma import ingestao      # noqa: E402
+from experimentos import generator   # noqa: E402
 
 from mcp import ClientSession, StdioServerParameters  # noqa: E402
 from mcp.client.stdio import stdio_client             # noqa: E402
@@ -65,7 +65,7 @@ def preparar_base(dir_trabalho: str, carga: int | None = None) -> str:
     """
     carga = CARGA if carga is None else carga
     db_path = os.path.join(dir_trabalho, "events.db")
-    database.create_database(db_path)
+    persistencia.create_database(db_path)
     fmt = "%Y-%m-%d %H:%M:%S.%f"
 
     for nome_cenario, campanha in (("base", "campanha-comercial"),
@@ -75,7 +75,7 @@ def preparar_base(dir_trabalho: str, carga: int | None = None) -> str:
             campaign_name=campanha)
         for ev in eventos:
             origem = datetime.now(timezone.utc).strftime(fmt)[:-3]
-            database.register_event(
+            persistencia.register_event(
                 ev["campaign_name"], ev["event_type"], ev["source"],
                 external_event_id=ev["external_event_id"], target=ev["target"],
                 origin_ts=origem, db_path=db_path)
@@ -84,7 +84,7 @@ def preparar_base(dir_trabalho: str, carga: int | None = None) -> str:
     # diretamente: as notificações percorrem a camada de ingestão, que preserva
     # o corpo bruto em `raw_payload`. O funil é o mesmo do gerador, de modo que
     # a campanha é comparável às demais.
-    mensagem_de = {v: k for k, v in database.GOPHISH_MESSAGE_MAP.items()}
+    mensagem_de = {v: k for k, v in persistencia.GOPHISH_MESSAGE_MAP.items()}
     eventos = generator.generate_events(
         carga // 2, funnel=generator.scenario("baixo"), seed=SEMENTE + 1,
         campaign_name="campanha-operacoes")
@@ -92,7 +92,7 @@ def preparar_base(dir_trabalho: str, carga: int | None = None) -> str:
         mensagem = mensagem_de.get(ev["event_type"])
         if mensagem is None:
             continue
-        ingestion.handle_event({
+        ingestao.handle_event({
             "campaign_id": 42,
             "email": ev["target"],
             "time": f"2026-09-14T13:{i // 60 % 60:02d}:{i % 60:02d}Z",
@@ -226,7 +226,7 @@ async def executar() -> list[dict]:
         preparar_base(dir_trabalho)
         params = StdioServerParameters(
             command=sys.executable,
-            args=[os.path.join(_RAIZ, "server_mcp.py")],
+            args=[os.path.join(_RAIZ, "plataforma", "orquestracao.py")],
             cwd=dir_trabalho,
             env={**os.environ, "PYTHONPATH": _RAIZ, "PYTHONIOENCODING": "utf-8"},
         )

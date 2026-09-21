@@ -17,9 +17,11 @@ import sys
 import tempfile
 import threading
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _RAIZ not in sys.path:
+    sys.path.insert(0, _RAIZ)
 
-import ingestion  # noqa: E402
+from plataforma import ingestao  # noqa: E402
 
 SECRET = "segredo-de-teste-do-experimento"
 HOST = "127.0.0.1"
@@ -36,7 +38,7 @@ def post(port: int, payload, *, signature: str | None = None,
     """Envia uma requisição ao receptor. Devolve (código HTTP, corpo)."""
     body = raw if raw is not None else json.dumps(payload).encode("utf-8")
     headers = {"Content-Type": "application/json",
-               ingestion.SIGNATURE_HEADER: signature if signature is not None
+               ingestao.SIGNATURE_HEADER: signature if signature is not None
                else sign(body)}
     conn = http.client.HTTPConnection(HOST, port, timeout=timeout)
     try:
@@ -56,7 +58,7 @@ class Receptor:
 
     def __init__(self, db_path: str):
         self.db_path = db_path
-        self.server = ingestion.build_server(HOST, 0, SECRET, db_path)
+        self.server = ingestao.build_server(HOST, 0, SECRET, db_path)
         self.port = self.server.server_address[1]
         self.thread = threading.Thread(target=self.server.serve_forever,
                                        daemon=True)

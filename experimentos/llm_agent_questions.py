@@ -38,12 +38,13 @@ import urllib.error
 import urllib.request
 from datetime import datetime
 
+_RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _RAIZ not in sys.path:
+    sys.path.insert(0, _RAIZ)
 _HERE = os.path.dirname(os.path.abspath(__file__))
-_RAIZ = os.path.dirname(_HERE)
-sys.path.insert(0, _HERE)
-sys.path.insert(0, _RAIZ)
 
-from analytical_questions import PERGUNTAS, conteudo, preparar_base  # noqa: E402
+from experimentos.analytical_questions import (  # noqa: E402
+    PERGUNTAS, conteudo, preparar_base)
 
 from mcp import ClientSession, StdioServerParameters  # noqa: E402
 from mcp.client.stdio import stdio_client             # noqa: E402
@@ -142,7 +143,7 @@ async def executar(load: int, modelo: str, teto: int) -> list[dict]:
         preparar_base(dir_trabalho, carga=load)
         params = StdioServerParameters(
             command=sys.executable,
-            args=[os.path.join(_RAIZ, "server_mcp.py")],
+            args=[os.path.join(_RAIZ, "plataforma", "orquestracao.py")],
             cwd=dir_trabalho,
             env={**os.environ, "PYTHONPATH": _RAIZ, "PYTHONIOENCODING": "utf-8"},
         )

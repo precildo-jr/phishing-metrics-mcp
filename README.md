@@ -34,7 +34,7 @@ Quatro camadas com responsabilidades distintas:
 ┌─────────────────┐   eventos de       ┌─────────────────┐
 │   SIMULAÇÃO     │   campanha         │    INGESTÃO     │
 │                 │ ─────────────────► │                 │
-│ GoPhish         │   HTTP / webhook   │ recepção e      │
+│ Gophish         │   HTTP / webhook   │ recepção e      │
 │ (admin + phish  │                    │ normalização    │
 │  server)        │                    │                 │
 └─────────────────┘                    └────────┬────────┘
@@ -63,16 +63,34 @@ existentes, sem implementação prévia de um endpoint por pergunta.
 
 ---
 
-## Estado da implementação
+## Estrutura do repositório
 
-| Componente | Arquivo | Estado |
-|---|---|---|
-| Camada de persistência (esquema de funil, idempotência, latência) | `database.py` | implementado |
-| Camada de ingestão (webhook do GoPhish, validação HMAC) | `ingestion.py` | implementado |
-| Camada de orquestração (3 ferramentas MCP) | `server_mcp.py` | implementado |
-| Módulo analítico (taxas de funil, latências) | `database.py` | implementado |
-| Arnês de experimento | `experiments/` | em desenvolvimento |
-| Geração de figuras | — | em desenvolvimento |
+```
+plataforma/     núcleo da solução — a contribuição do trabalho
+  persistencia.py   camada de persistência (SQLite, idempotência, latência)
+  ingestao.py       camada de ingestão (webhook, validação HMAC, normalização)
+  orquestracao.py   camada de orquestração (servidor MCP, três ferramentas)
+experimentos/   reprodução dos resultados citados no TCC
+  generator.py, run_experiment.py, concurrency.py, robustness.py,
+  analytical_questions.py, llm_agent_questions.py, webhook.py
+analise/        ferramentas de análise e evidência
+  make_figures.py, make_arch_figure.py, capture_webhook.py, smtp_sink.py
+data/           conjuntos de dados brutos das execuções (rastreabilidade)
+```
+
+Os scripts são executados a partir da raiz do repositório; cada um insere a
+raiz em `sys.path` para importar o pacote `plataforma`.
+
+## Componentes
+
+| Componente | Arquivo |
+|---|---|
+| Camada de persistência (esquema de funil, idempotência, latência) | `plataforma/persistencia.py` |
+| Camada de ingestão (webhook do Gophish, validação HMAC) | `plataforma/ingestao.py` |
+| Camada de orquestração (três ferramentas MCP) | `plataforma/orquestracao.py` |
+| Módulo analítico (taxas de funil, latências) | `plataforma/persistencia.py` |
+| Arnês de experimento (carga, concorrência, robustez, composição) | `experimentos/` |
+| Geração de figuras e captura de evidência | `analise/` |
 
 ---
 
@@ -80,7 +98,7 @@ existentes, sem implementação prévia de um endpoint por pergunta.
 
 - Python 3.14 ou superior (verificado em 3.14.4)
 - SQLite — incluído na biblioteca padrão do Python (verificado em 3.50.4)
-- GoPhish — distribuição oficial, apenas para os experimentos de ingestão
+- Gophish — distribuição oficial, apenas para os experimentos de ingestão
 
 ## Instalação
 
@@ -100,17 +118,17 @@ pip install -r requirements.txt
 **Criar a base e executar a verificação da camada de persistência:**
 
 ```bash
-python database.py
+python plataforma/persistencia.py
 ```
 
 Cria o arquivo `events.db` caso não exista, registra um evento de verificação e
 imprime os registros armazenados.
 
-**Iniciar o receptor de webhook do GoPhish (camada de ingestão):**
+**Iniciar o receptor de webhook do Gophish (camada de ingestão):**
 
 ```bash
-# o segredo deve ser o mesmo configurado no webhook do GoPhish
-GOPHISH_WEBHOOK_SECRET=<segredo> python ingestion.py --host 127.0.0.1 --port 9099
+# o segredo deve ser o mesmo configurado no webhook do Gophish
+GOPHISH_WEBHOOK_SECRET=<segredo> python plataforma/ingestao.py --host 127.0.0.1 --port 9099
 ```
 
 O receptor valida a assinatura HMAC-SHA256 do corpo de cada requisição
@@ -120,7 +138,7 @@ idempotente. Requisições sem assinatura válida recebem `401`.
 **Iniciar o servidor MCP:**
 
 ```bash
-python server_mcp.py
+python plataforma/orquestracao.py
 ```
 
 O servidor comunica-se por entrada e saída padrão (stdio) e é consumido por um
@@ -132,7 +150,7 @@ acrescente à configuração de servidores MCP:
   "mcpServers": {
     "gophish-tcc-server": {
       "command": "python",
-      "args": ["CAMINHO/ABSOLUTO/PARA/server_mcp.py"]
+      "args": ["CAMINHO/ABSOLUTO/PARA/plataforma/orquestracao.py"]
     }
   }
 }
@@ -145,8 +163,8 @@ acrescente à configuração de servidores MCP:
 | Ferramenta | Parâmetros | Retorno |
 |---|---|---|
 | `register_simulated_event` | `campaign_name: str`, `event_type: str`, `source: str = "mcp_server"` | `status`, `event_id`, `campaign_name`, `event_type`, `source` |
-| `get_registered_events` | — | `total`, `events[]` com `id`, `campaign_name`, `event_type`, `source`, `created_at` |
-| `generate_basic_metrics` | — | `total_events`, `events_by_type` (contagem por tipo) |
+| `get_registered_events` | — | `total`, `events[]` com `id`, `campaign_name`, `event_type`, `source`, `origin_ts`, `ingest_ts`, `target_id` |
+| `generate_basic_metrics` | — | `total_events`, `events_by_type`, `funnel_rates` (taxas de conversão), `propagation_latency_ms` (percentis 50 e 95 e máximo) |
 
 ## Modelo de dados
 
@@ -155,7 +173,7 @@ Duas tabelas. `campaigns` normaliza a campanha, antes tratada como texto livre:
 | Campo | Tipo | Descrição |
 |---|---|---|
 | `id` | INTEGER PK | identificador interno |
-| `external_id` | INTEGER UNIQUE | `campaign_id` do GoPhish, quando houver |
+| `external_id` | INTEGER UNIQUE | `campaign_id` do Gophish, quando houver |
 | `name` | TEXT NOT NULL | nome da campanha |
 | `created_at` | TEXT NOT NULL | instante de criação do registro |
 
@@ -166,14 +184,14 @@ medição de latência:
 |---|---|---|
 | `id` | INTEGER PK | identificador do registro |
 | `campaign_id` | INTEGER FK → campaigns | campanha associada |
-| `target_id` | TEXT | identificador do alvo **pseudonimizado** (SHA-256); nenhum e-mail é gravado em claro |
+| `target_id` | TEXT | identificador do alvo **pseudonimizado** por HMAC-SHA256 com chave; sem a chave não se associa de volta ao endereço |
 | `message_id` | TEXT | identificador da mensagem, quando disponível |
 | `external_event_id` | TEXT UNIQUE | chave de **idempotência**: reentrega não duplica |
 | `event_type` | TEXT NOT NULL | tipo normalizado (ver abaixo) |
 | `source` | TEXT NOT NULL | origem do registro (`gophish_webhook`, `mcp_server`) |
 | `origin_ts` | TEXT NOT NULL | instante em que o evento ocorreu |
 | `ingest_ts` | TEXT NOT NULL | instante em que foi persistido |
-| `raw_payload` | TEXT | notificação original, para auditoria |
+| `raw_payload` | TEXT | notificação original, para auditoria, com o endereço do destinatário **suprimido** antes da gravação |
 
 A latência de propagação de cada evento é `ingest_ts − origin_ts`. As
 instruções SQL utilizam parâmetros vinculados, e há índice em
@@ -181,7 +199,7 @@ instruções SQL utilizam parâmetros vinculados, e há índice em
 
 **Tipos de evento normalizados** (degraus do funil): `EMAIL_SENT`,
 `EMAIL_OPENED`, `LINK_CLICKED`, `DATA_SUBMITTED`, `EMAIL_REPORTED`. A camada de
-ingestão converte as mensagens do GoPhish (`Email Sent`, `Email Opened`,
+ingestão converte as mensagens do Gophish (`Email Sent`, `Email Opened`,
 `Clicked Link`, `Submitted Data`, `Email Reported`) para esse vocabulário;
 mensagens fora do funil, como `Campaign Created`, são descartadas.
 
@@ -200,20 +218,6 @@ mensagens fora do funil, como `Campaign Created`, são descartadas.
 - Sementes, parâmetros de cada cenário e conjuntos de dados resultantes
   depositados em `data/`.
 - A versão citada no TCC é identificada por etiqueta (tag) do repositório.
-
-## Estrutura
-
-```
-MCP_TCC/
-├── database.py        camada de persistência + módulo analítico
-├── ingestion.py       camada de ingestão (receptor de webhook do GoPhish)
-├── server_mcp.py      camada de orquestração (servidor MCP)
-├── experiments/       arnês de experimento e cenários
-├── data/              conjuntos de dados brutos das execuções (CSV)
-├── requirements.txt
-├── LICENSE
-└── README.md
-```
 
 ## Licença
 

@@ -24,9 +24,11 @@ from dataclasses import dataclass
 
 # Permite importar a camada de persistência tanto da raiz do repositório
 # quanto de dentro de experiments/.
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _RAIZ not in sys.path:
+    sys.path.insert(0, _RAIZ)
 
-import database  # noqa: E402
+from plataforma import persistencia  # noqa: E402
 
 
 @dataclass(frozen=True)
@@ -96,15 +98,15 @@ def generate_events(n_events: int, *, funnel: FunnelParams = FunnelParams(),
         if rng.random() > funnel.p_deliver:
             continue  # não entregue: nenhum evento para este alvo
 
-        steps = [database.EMAIL_SENT]
+        steps = [persistencia.EMAIL_SENT]
         if rng.random() < funnel.p_open:
-            steps.append(database.EMAIL_OPENED)
+            steps.append(persistencia.EMAIL_OPENED)
             if rng.random() < funnel.p_click:
-                steps.append(database.LINK_CLICKED)
+                steps.append(persistencia.LINK_CLICKED)
                 if rng.random() < funnel.p_submit:
-                    steps.append(database.DATA_SUBMITTED)
+                    steps.append(persistencia.DATA_SUBMITTED)
             if rng.random() < funnel.p_report:
-                steps.append(database.EMAIL_REPORTED)
+                steps.append(persistencia.EMAIL_REPORTED)
 
         for event_type in steps:
             delay_ms = rng.lognormvariate(timing.delay_ln_mu, timing.delay_ln_sigma)
@@ -135,9 +137,9 @@ if __name__ == "__main__":
         by = {}
         for e in evs:
             by[e["event_type"]] = by.get(e["event_type"], 0) + 1
-        sent = by.get(database.EMAIL_SENT, 0)
-        clicked = by.get(database.LINK_CLICKED, 0)
-        submitted = by.get(database.DATA_SUBMITTED, 0)
+        sent = by.get(persistencia.EMAIL_SENT, 0)
+        clicked = by.get(persistencia.LINK_CLICKED, 0)
+        submitted = by.get(persistencia.DATA_SUBMITTED, 0)
         click_of_sent = clicked / sent if sent else 0
         submit_of_click = submitted / clicked if clicked else 0
         print(f"cenário {sc.name:5} | enviados={sent:4} "

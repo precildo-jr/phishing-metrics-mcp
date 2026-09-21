@@ -34,17 +34,17 @@ import threading
 import time
 from datetime import datetime
 
-_HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, _HERE)
-sys.path.insert(0, os.path.dirname(_HERE))
+_RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _RAIZ not in sys.path:
+    sys.path.insert(0, _RAIZ)
 
 import http.client  # noqa: E402
 
-import database     # noqa: E402
-import ingestion    # noqa: E402
-from robustness import HOST, Receptor, sign  # noqa: E402
+from plataforma import persistencia  # noqa: E402
+from plataforma import ingestao      # noqa: E402
+from experimentos.webhook import HOST, Receptor, sign  # noqa: E402
 
-DATA_DIR = os.path.join(os.path.dirname(_HERE), "data")
+DATA_DIR = os.path.join(_RAIZ, "data")
 CSV_FIELDS = ["escritores", "eventos_por_escritor", "emitidos", "persistidos",
               "perdidos", "loss_rate", "desfechos", "elapsed_s",
               "vazao_eventos_s"]
@@ -65,7 +65,7 @@ def submeter(port: int, escritor: int, quantos: int,
             conn = http.client.HTTPConnection(HOST, port, timeout=60)
             conn.request("POST", "/", body=corpo, headers={
                 "Content-Type": "application/json",
-                ingestion.SIGNATURE_HEADER: sign(corpo)})
+                ingestao.SIGNATURE_HEADER: sign(corpo)})
             resp = conn.getresponse()
             corpo_resp = json.loads(resp.read())
             conn.close()

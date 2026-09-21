@@ -5,8 +5,8 @@ dados própria — aos sete casos adversos previstos no protocolo experimental d
 TCC. Para cada caso registra o comportamento esperado, o comportamento
 observado e o veredito, na forma exigida pela seção Material e Métodos.
 
-Os casos não exercitam simulacros: o servidor é o de `ingestion.py`, a
-persistência é a de `database.py`, e as requisições trafegam por soquete. O
+Os casos não exercitam simulacros: o servidor é o de `ingestao.py`, a
+persistência é a de `persistencia.py`, e as requisições trafegam por soquete. O
 que se verifica é, portanto, o comportamento do componente tal como seria
 executado em operação.
 
@@ -37,16 +37,16 @@ import tempfile
 import threading
 from datetime import datetime
 
-_HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, _HERE)
-sys.path.insert(0, os.path.dirname(_HERE))
+_RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _RAIZ not in sys.path:
+    sys.path.insert(0, _RAIZ)
 
-import database    # noqa: E402
-import ingestion   # noqa: E402
+from plataforma import persistencia  # noqa: E402
+from plataforma import ingestao      # noqa: E402
 
-from webhook import HOST, Receptor, novo_db, post, sign  # noqa: E402,F401
+from experimentos.webhook import HOST, Receptor, novo_db, post, sign  # noqa: E402,F401
 
-DATA_DIR = os.path.join(os.path.dirname(_HERE), "data")
+DATA_DIR = os.path.join(_RAIZ, "data")
 
 CSV_FIELDS = ["caso", "descricao", "esperado", "observado", "veredito"]
 
@@ -184,7 +184,7 @@ def caso_r5() -> dict:
             s2, c2 = post(r.port, gophish_payload(
                 "Email Opened", "alvo@exemplo.test", "2026-09-14T12:20:00Z"))
             total = count_events(db)
-            contagens = database.count_by_type(db)
+            contagens = persistencia.count_by_type(db)
             ok = (s1 == 200 and c1.get("status") == "stored"
                   and s2 == 200 and c2.get("status") == "stored" and total == 2
                   and contagens.get("LINK_CLICKED") == 1
@@ -221,7 +221,7 @@ def caso_r6() -> dict:
             finally:
                 os.rmdir(db)
             # Restabelecida a persistência, o receptor volta a registrar.
-            database.create_database(db)
+            persistencia.create_database(db)
             s2, c2 = post(r.port, gophish_payload(
                 "Clicked Link", "alvo@exemplo.test", "2026-09-14T12:41:00Z"))
             total = count_events(db)

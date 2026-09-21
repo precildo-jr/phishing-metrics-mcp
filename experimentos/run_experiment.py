@@ -39,19 +39,19 @@ import time
 from datetime import datetime, timezone
 
 # Permite executar tanto da raiz do repositório quanto de dentro de experiments/.
-_HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, _HERE)
-sys.path.insert(0, os.path.dirname(_HERE))
+_RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _RAIZ not in sys.path:
+    sys.path.insert(0, _RAIZ)
 
-import database          # noqa: E402
-import generator         # noqa: E402
-from webhook import Receptor, novo_db, post  # noqa: E402
+from plataforma import persistencia          # noqa: E402
+from experimentos import generator           # noqa: E402
+from experimentos.webhook import Receptor, novo_db, post  # noqa: E402
 
-DATA_DIR = os.path.join(os.path.dirname(_HERE), "data")
+DATA_DIR = os.path.join(_RAIZ, "data")
 
 # Mensagem do Gophish correspondente a cada degrau do funil, para que os
 # eventos gerados sejam submetidos no mesmo formato que a ferramenta emitiria.
-MENSAGEM_DE = {v: k for k, v in database.GOPHISH_MESSAGE_MAP.items()}
+MENSAGEM_DE = {v: k for k, v in persistencia.GOPHISH_MESSAGE_MAP.items()}
 
 CSV_FIELDS = [
     "scenario", "load", "rep", "seed", "transport",
@@ -100,12 +100,12 @@ def _submeter_direto(events, db_path: str) -> tuple[int, int, float]:
     medido nas execuções anteriores à versão 1.1.0.
     """
     fmt = "%Y-%m-%d %H:%M:%S.%f"
-    database.create_database(db_path)
+    persistencia.create_database(db_path)
     submetidos = 0
     t0 = time.perf_counter()
     for ev in events:
         origem = datetime.now(timezone.utc).strftime(fmt)[:-3]
-        database.register_event(
+        persistencia.register_event(
             ev["campaign_name"], ev["event_type"], ev["source"],
             external_event_id=ev["external_event_id"], target=ev["target"],
             origin_ts=origem, db_path=db_path)
@@ -127,11 +127,11 @@ def run_one(load: int, scenario_name: str, rep: int, seed: int,
                     else _submeter_direto)
         emitted, accepted, elapsed = submeter(events, db_path)
 
-        counts = database.count_by_type(db_path)
+        counts = persistencia.count_by_type(db_path)
         persisted = sum(counts.values())
         loss = (emitted - persisted) / emitted if emitted else 0.0
-        lat = database.latency_summary(db_path)
-        fr = database.funnel_rates(db_path)
+        lat = persistencia.latency_summary(db_path)
+        fr = persistencia.funnel_rates(db_path)
         click_of_sent = round(fr["clicked"] / fr["sent"], 4) if fr["sent"] else 0.0
 
         return {
