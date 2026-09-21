@@ -22,6 +22,7 @@ Métodos do TCC.
 | `smtp_sink.py` | Coletor SMTP mínimo que aceita e descarta mensagens, para que o Gophish emita `Email Sent` sem que nenhum e-mail deixe a máquina. |
 | `webhook.py` | Utilitários comuns aos arneses que falam com o receptor: segredo, assinatura HMAC e subida do servidor em porta efêmera. |
 | `analytical_questions.py` | Verificação da decisão arquitetural: dez perguntas analíticas submetidas ao servidor MCP por conexão real de protocolo. Produz `data/perguntas-analiticas-*.csv`. |
+| `make_arch_figure.py` | Gera o diagrama arquitetural da plataforma (Figura 1 do TCC), em escala de cinza. Requer matplotlib. |
 | `make_figures.py` | Figuras do TCC em escala de cinza, a partir de um CSV de varredura. Requer matplotlib (`requirements-figs.txt`). |
 
 ## Execução completa
