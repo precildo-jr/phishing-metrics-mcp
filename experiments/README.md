@@ -18,6 +18,8 @@ Métodos do TCC.
 | `robustness.py` | Bateria de verificação de robustez: sete casos adversos contra o receptor de webhook em operação real, sobre HTTP. Produz `data/robustez-*.csv`. |
 | `concurrency.py` | Varredura de concorrência: N escritores simultâneos contra o receptor real, comparando requisições aceitas com registros persistidos. Produz `data/concorrencia-*.csv`. |
 | `llm_agent_questions.py` | As mesmas dez perguntas, agora entregues em linguagem natural a um modelo, que descobre as ferramentas e decide sozinho quais invocar. Produz `data/agente-llm-*.csv`. Requer `DEEPSEEK_API`. |
+| `capture_webhook.py` | Captura ponta a ponta: sobe o receptor real e registra cabeçalhos, corpo bruto, veredito da assinatura e desfecho de cada requisição do Gophish. Produz `data/captura-webhook-*.jsonl`. |
+| `smtp_sink.py` | Coletor SMTP mínimo que aceita e descarta mensagens, para que o Gophish emita `Email Sent` sem que nenhum e-mail deixe a máquina. |
 | `webhook.py` | Utilitários comuns aos arneses que falam com o receptor: segredo, assinatura HMAC e subida do servidor em porta efêmera. |
 | `analytical_questions.py` | Verificação da decisão arquitetural: dez perguntas analíticas submetidas ao servidor MCP por conexão real de protocolo. Produz `data/perguntas-analiticas-*.csv`. |
 | `make_figures.py` | Figuras do TCC em escala de cinza, a partir de um CSV de varredura. Requer matplotlib (`requirements-figs.txt`). |
