@@ -155,6 +155,11 @@ def main() -> None:
     parser.add_argument("--loads", default="100,1000,10000",
                         help="faixas de carga separadas por vírgula")
     parser.add_argument("--reps", type=int, default=30)
+    parser.add_argument("--start-rep", type=int, default=1,
+                        help="primeira repeticao a executar; permite retomar uma "
+                             "varredura interrompida sem refazer o que ja foi "
+                             "gravado, pois a semente de cada execucao deriva do "
+                             "numero da repeticao e independe da ordem de execucao")
     parser.add_argument("--seed", type=int, default=20260910)
     parser.add_argument("--scenarios", default="baixo,base,alto")
     parser.add_argument("--transport", default="webhook",
@@ -170,12 +175,13 @@ def main() -> None:
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     out_path = os.path.join(DATA_DIR, f"experimento-{stamp}.csv")
 
-    total = len(scenarios) * len(loads) * args.reps
+    faixa = range(args.start_rep, args.reps + 1)
+    total = len(scenarios) * len(loads) * len(faixa)
     done = 0
     with open(out_path, "w", newline="", encoding="utf-8") as fh:
         writer = csv.DictWriter(fh, fieldnames=CSV_FIELDS)
         writer.writeheader()
-        for rep in range(1, args.reps + 1):
+        for rep in faixa:
             # Alterna a ordem das faixas de carga a cada repetição.
             ordered = loads if rep % 2 else list(reversed(loads))
             for scenario_name in scenarios:

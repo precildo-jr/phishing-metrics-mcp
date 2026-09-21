@@ -11,10 +11,15 @@ produziu os dados e os dados produzidos.
 
 | Arquivo | Produzido por | Conteúdo |
 |---|---|---|
-| `experimento-20260914-122004.csv` | `experiments/run_experiment.py` | Execução parcial de verificação, interrompida. Não sustenta resultado do TCC. |
-| `experimento-20260914-143857.csv` | `experiments/run_experiment.py` | **Varredura definitiva**: 3 perfis de funil × 3 faixas de carga × 30 repetições = 270 execuções, 999.000 eventos. |
-| `robustez-20260915-085919.csv` | `experiments/robustness.py` | Bateria de verificação de robustez: 7 casos adversos contra o receptor em operação real. |
-| `perguntas-analiticas-20260915-090334.csv` | `experiments/analytical_questions.py` | 10 perguntas analíticas submetidas ao servidor MCP por conexão real de protocolo. |
+| `experimento-20260914-143857.csv` | `run_experiment.py --transport direct` | Varredura de carga gravando direto na persistência, sem passar pela camada de ingestão. 270 execuções, 999.000 eventos. Serve de contraste para medir o custo da coleta. |
+| `experimento-20260918-172713.csv` | `run_experiment.py` (webhook) | **Varredura definitiva**: mesmos 3 perfis × 3 cargas × 30 repetições, mas com cada evento entregue ao receptor por requisição assinada. 999.000 eventos, perda nula. |
+| `concorrencia-v1.0.0-20260917.csv` | `concurrency.py` | Perda sob escrita concorrente antes da correção: 0,98% em 1.740 eventos. |
+| `concorrencia-v1.1.0-20260917.csv` | `concurrency.py` | Mesma varredura após a correção: perda nula. |
+| `robustez-20260915-085919.csv` | `robustness.py` | Bateria de robustez na versão 1.0.0. |
+| `robustez-20260917-083948.csv` | `robustness.py` | Bateria de robustez na versão 1.1.0. 7/7 conformes em ambas. |
+| `perguntas-analiticas-*.csv` | `analytical_questions.py` | Composição programática das ferramentas MCP: 8/10. |
+| `agente-llm-carga50-20260917.csv` | `llm_agent_questions.py --load 50` | Agente real sobre base de 125 eventos: 8/10, sem truncamento. |
+| `agente-llm-carga200-20260917.csv` | `llm_agent_questions.py --load 200` | Agente real sobre base de 500 eventos: 3/10, com 8 retornos truncados. |
 
 ## Dicionário de dados
 
@@ -23,6 +28,8 @@ produziu os dados e os dados produzidos.
 | Campo | Tipo | Significado |
 |---|---|---|
 | `scenario` | texto | Perfil de funil: `baixo`, `base` ou `alto` (ver `experiments/generator.py`). |
+| `transport` | texto | `webhook` quando o evento percorreu a camada de ingestão por HTTP; `direct` quando foi gravado direto na persistência. |
+| `accepted` | inteiro | Requisições que o receptor aceitou (HTTP 200). Difere de `emitted` apenas se alguma for recusada. |
 | `load` | inteiro | Eventos gerados na execução: 100, 1.000 ou 10.000. |
 | `rep` | inteiro | Número da repetição, de 1 a 30. |
 | `seed` | inteiro | Semente pseudoaleatória da execução. A mesma semente reproduz exatamente o mesmo conjunto de eventos. |
@@ -66,6 +73,20 @@ Os arquivos trazem o sufixo da versão da plataforma: `concorrencia-v1.0.0-*.csv
 documenta a perda observada antes da correção e `concorrencia-v1.1.0-*.csv`, o
 resultado depois dela. Ambos foram produzidos pelo mesmo arnês.
 
+### `agente-llm-*.csv` — perguntas submetidas a um agente real
+
+| Campo | Significado |
+|---|---|
+| `id` | Identificador da pergunta, de `Q01` a `Q10`. |
+| `pergunta` | Pergunta entregue ao modelo em linguagem natural. |
+| `ferramentas_invocadas` | Ferramentas que o modelo decidiu chamar, na ordem em que as chamou. |
+| `rodadas` | Idas e vindas de conversa até o modelo concluir. |
+| `truncou` | `sim` quando algum retorno de ferramenta excedeu o teto e foi cortado. |
+| `respondida` | Veredito do próprio modelo sobre ter conseguido responder. |
+| `resposta` | Resposta produzida, quando houve. |
+| `justificativa` | Explicação do modelo, sobretudo quando não respondeu. |
+| `tokens` | Tokens consumidos na pergunta. |
+
 ### `perguntas-analiticas-*.csv` — composição sobre a camada de orquestração
 
 | Campo | Significado |
@@ -80,10 +101,17 @@ resultado depois dela. Ambos foram produzidos pelo mesmo arnês.
 
 ```
 python experiments/run_experiment.py --loads 100,1000,10000 --reps 30 --seed 20260910
+python experiments/run_experiment.py --transport direct          # percurso de contraste
+python experiments/concurrency.py
 python experiments/robustness.py
 python experiments/analytical_questions.py
-python experiments/make_figures.py          # usa o CSV mais recente
+python experiments/llm_agent_questions.py --load 50              # requer DEEPSEEK_API
+python experiments/llm_agent_questions.py --load 200
+python experiments/make_figures.py                               # usa o CSV mais recente
 ```
+
+A varredura de carga pelo webhook leva cerca de 4,5 h; use `--start-rep` para
+retomá-la se for interrompida.
 
 As figuras derivadas não são versionadas: `experiments/make_figures.py` as
 regenera a partir do CSV a qualquer momento.
